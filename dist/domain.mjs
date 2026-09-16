@@ -1,3 +1,4 @@
+import {smsTiming,transferFacts,paymentIdentity,timeParts} from './payments.mjs';
 export const CURRENCIES = ['KRW', 'VND', 'USD', 'EUR', 'GBP', 'INR', 'SGD', 'AUD'];
 export const CATEGORIES = ['Food & drinks', 'Groceries', 'Shopping', 'Transport', 'Bills & home', 'Health', 'Entertainment', 'Travel', 'Other', 'Income', 'Refund', 'Transfer'];
 export const BANK_RULES = [
@@ -67,7 +68,7 @@ function merchantName(text,bank){
   if(m)return m[1].trim().replace(/[.;]$/,'').slice(0,80);
   return 'Unidentified transaction';
 }
-export const fingerprint=t=>`${t.source||'sms'}|${t.date}|${normalize(t.raw).replace(/\s+/g,' ').trim()}`;
+export const fingerprint=t=>paymentIdentity(t)||`${t.source||'sms'}|${t.date}|${normalize(t.raw).replace(/\s+/g,' ').trim()}`;
 export function parseSms(message,{currency='KRW',date=localDate(),rules=BANK_RULES}={}){
   const obj=typeof message==='string'?{body:message}:message;
   const raw=String(obj.body??obj.text??obj.message??'').trim(); const s=normalize(raw);
@@ -84,25 +85,30 @@ export function parseSms(message,{currency='KRW',date=localDate(),rules=BANK_RUL
   const refund=/refund|reversal|취소|환불|hoan tien/.test(s);
   if(!expense&&!income&&!refund)return skip('No completed transaction found');
   if(!amounts.length)return skip('Transaction amount not recognized');
-  let type=refund?'refund':income&&!expense?'income':'expense';
+  const facts=transferFacts(raw,refund?'refund':income&&!expense?'income':'expense');
+  let type=refund?'refund':facts.positive&&!facts.negative?'income':income&&!expense?'income':'expense';
+  if(facts.ownAccount)type='transfer';
+  const timing=smsTiming(obj,raw,cur,date);
   let suppliedDate=obj.date;
-  if(typeof suppliedDate==='number'||/^\d{13}$/.test(String(suppliedDate)))suppliedDate=localDate(new Date(Number(suppliedDate)));
+  if(timing.receivedTime)suppliedDate=timeParts(timing.receivedTime,timing.timeZone).date;
   const hasMetadata=typeof suppliedDate==='string'&&validDate(suppliedDate.slice(0,10));
   const detected=detectDate(raw,hasMetadata?suppliedDate.slice(0,10):date);
-  const merchant=merchantName(raw,bank);
+  const merchant=type==='income'&&facts.payer?facts.payer:merchantName(raw,bank);
   const warnings=[];
   if(bank==='Unknown bank')warnings.push('Check bank');
   if(detected.inferred&&!hasMetadata)warnings.push('Check date');
   if(merchant==='Unidentified transaction')warnings.push('Add merchant');
   if(amounts.length>1)warnings.push('Multiple amounts: check total');
-  if(income&&expense&&!refund)warnings.push('Check transaction type');
+  if(income&&expense&&!refund&&!(facts.positive&&!facts.negative))warnings.push('Check transaction type');
+  if(timing.invalidTimestamp)warnings.push('Invalid transaction timestamp');
+  if(timing.timeDateAssumed)warnings.push('Time found; check the assumed date');
   if(/transfer|이체|chuyen (?:khoan|tien)/.test(s))warnings.push('If between your own accounts, choose Transfer');
-  const t={bank,merchant,amount:amounts[0].amount,currency:cur,date:detected.date,type,category:categorize(merchant,type),raw,source:'sms',warnings};
+  const t={bank,merchant,amount:amounts[0].amount,currency:cur,date:timing.transactionTime?timing.timingDate:detected.date,type,category:categorize(merchant,type),raw,source:'sms',warnings,...facts,...timing,incomingTransfer:type==='income'&&(facts.incomingTransfer||facts.positive)};
   t.fingerprint=fingerprint(t);return {status:'parsed',transaction:t};
 }
 export function parseBatch(messages,options={},existing=[]){
   if(!Array.isArray(messages)||messages.length>5000)throw new Error('Import up to 5,000 messages at a time.');
-  const seen=new Set(existing.map(t=>t.fingerprint||fingerprint(t)));const transactions=[],skipped=[];
+  const seen=new Set(existing.flatMap(t=>[t.fingerprint,fingerprint(t)].filter(Boolean)));const transactions=[],skipped=[];
   for(const m of messages){const result=parseSms(m,options);if(result.status==='skipped'){skipped.push(result);continue;}const t=result.transaction;if(seen.has(t.fingerprint)){skipped.push({raw:t.raw,reason:'Duplicate message'});continue;}seen.add(t.fingerprint);transactions.push(t);}
   return {transactions,skipped};
 }

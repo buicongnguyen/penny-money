@@ -10,6 +10,18 @@ A responsive, device-local spending tracker for South Korea and Vietnam. Open th
 - Read a JPG/PNG/WebP receipt with Korean + English or Vietnamese + English OCR. Review the suggested merchant, total, date, and category before saving. Manual entry and pasted receipt text also work.
 - Filter monthly results by bank and currency. Edit transaction details, mark transfers between your accounts as Transfer, and export the filtered transactions to CSV.
 - Add custom bank sender/name rules for future imports.
+- Open **Incoming payments** (or `#incoming`) to list bank credits from other people, identify payers/accounts/references, and label Facebook or direct transfers. Filter by day, month, time of day, exact time range, bank, currency, and channel. Click an hourly bar or day-period chip to filter.
+- The **Simulation** inbox contains fictional Korean and Vietnamese payments, including two payments in the same second, minute/second precision, and missing times. **Simulate incoming SMS** lets you choose payer, amount, bank time, milliseconds, memo, reference, and SMS delay. Simulation data is temporary and never enters personal totals. **My messages** uses saved imports.
+
+## Incoming payment timestamps
+
+Bank transaction time and SMS arrival time are distinct. Pasted SMS can supply bank time; JSON/XML metadata can supply SMS arrival time. JSON supports `receivedAt` (epoch milliseconds or ISO timestamp), `transactionAt` (optional explicit bank timestamp), and `timeZone` (`Asia/Seoul` or `Asia/Ho_Chi_Minh`). The existing Android `date` epoch-millisecond field is treated as SMS arrival time. `sender` is the SMS sender/bank, while the payer is extracted from the message body.
+
+Source precision is preserved: `14:32`, `14:32:18`, and `14:32:18.123` remain visibly different. Missing bank time is not replaced with SMS arrival time. Time-zone defaults come from currency (Korea +09, Vietnam +07) when the message lacks a zone; the details view discloses that assumption. Filters and day-period charts use the selected time zone and timestamp basis. Time-only ranges crossing midnight are supported. Low-precision timestamps overlap ranges within their known minute/second; their exact order inside that interval remains unknown.
+
+References identify duplicate notifications. Without a reference, available event timestamps participate in duplicate detection so otherwise identical messages received at different milliseconds survive. A reference is scoped by bank, account, currency, direction, and amount. Older date-only imports remain readable. Data that was discarded by the original prototype cannot be recovered retroactively.
+
+Facebook labels are suggested only from an explicit message keyword, or set by the user. Bank messages are not independently verified against a Facebook order or a bank. Incoming credits count as money in; marking a record as between your own accounts excludes it from income. Its kind can be changed back through Transactions. Payment-list CSV exports include both timestamp values, precision, selected zone, and simulation status.
 
 ## Data and limitations
 

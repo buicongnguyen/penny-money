@@ -41,7 +41,7 @@ function render(){
   $('rules-list').innerHTML=state.rules.map((r,i)=>`<div class="rule-row"><span class="merchant-icon">${icon('bank')}</span><div><strong>${escape(r.name)}</strong><p>${escape(r.keywords.join(' · '))}</p></div><button class="icon-button" data-delete-rule="${i}" aria-label="Remove ${escape(r.name)} rule">×</button></div>`).join('');storageNotice();
   paymentPage?.render();
 }
-function setView(view){state.view=['overview','transactions','rules','incoming'].includes(view)?view:'overview';if(location.hash!=='#'+state.view)history.replaceState(null,'','#'+state.view);render();}
+function setView(view){const previous=state.view;state.view=['overview','transactions','rules','incoming'].includes(view)?view:'overview';if(location.hash!=='#'+state.view)history.replaceState(null,'','#'+state.view);render();if(previous!==state.view)window.scrollTo({top:0,behavior:'instant'});}
 $('category-filter').innerHTML=option('all','all','All categories')+CATEGORIES.map(c=>option(c)).join('');
 $('edit-category').innerHTML=CATEGORIES.map(c=>option(c)).join('');$('edit-currency').innerHTML=CURRENCIES.map(c=>option(c)).join('');
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));$('view-all').onclick=()=>setView('transactions');

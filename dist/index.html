@@ -1,22 +1,24 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#152c2c"><meta name="description" content="Turn bank SMS messages into a clear monthly spending picture. A private, browser-based money tracker.">
   <title>Penny — Your money, made clear</title>
+  <script src="./theme.js"></script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23152c2c'/%3E%3Cpath d='M10 25V8h7a6 6 0 0 1 0 12h-7m0-8h7a2 2 0 0 1 0 4h-7' stroke='%23bbf279' stroke-width='3' fill='none'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./payments.css">
+  <link rel="stylesheet" href="./appearance.css">
 </head>
 <body>
   <aside class="sidebar">
-    <a class="brand" href="#overview" aria-label="Penny overview"><span class="brand-symbol">p</span>penny<span class="brand-period">.</span></a>
+    <div class="brand-row"><a class="brand" href="#overview" aria-label="Penny overview"><span class="brand-symbol">p</span>penny<span class="brand-period">.</span></a><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Dark mode" aria-pressed="false" title="Switch to dark mode"><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button></div>
     <div class="workspace"><div class="workspace-icon">P</div><div>Personal space<small>Your everyday finances</small></div></div>
     <p class="nav-label">WORKSPACE</p>
     <nav aria-label="Main navigation">
-      <button data-view="overview" class="nav-item active"><span data-icon="grid"></span>Overview</button>
-      <button data-view="transactions" class="nav-item"><span data-icon="list"></span>Transactions<span class="nav-count" id="nav-count">0</span></button>
-      <button data-view="rules" class="nav-item"><span data-icon="bank"></span>Bank rules</button>
+      <button data-view="overview" class="nav-item active" aria-label="Overview" title="Overview"><span data-icon="grid"></span><span class="nav-text">Overview</span></button>
+      <button data-view="transactions" class="nav-item" aria-label="Transactions" title="Transactions"><span data-icon="list"></span><span class="nav-text">Transactions</span><span class="nav-count" id="nav-count">0</span></button>
+      <button data-view="rules" class="nav-item" aria-label="Bank rules" title="Bank rules"><span data-icon="bank"></span><span class="nav-text">Bank rules</span></button>
     </nav>
     <div class="sidebar-bottom"><div class="local-note"><span data-icon="shield"></span><strong>On your device.</strong><p>Your SMS stays in this browser. No account or bank connection needed.</p></div><div class="profile"><div class="avatar">Y</div><div>Your workspace<small>Web prototype</small></div><span class="version">v0.1</span></div></div>
   </aside>

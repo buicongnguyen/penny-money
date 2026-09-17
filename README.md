@@ -23,6 +23,14 @@ References identify duplicate notifications. Without a reference, available even
 
 Facebook labels are suggested only from an explicit message keyword, or set by the user. Bank messages are not independently verified against a Facebook order or a bank. Incoming credits count as money in; marking a record as between your own accounts excludes it from income. Its kind can be changed back through Transactions. Payment-list CSV exports include both timestamp values, precision, selected zone, and simulation status.
 
+## Appearance and mobile use
+
+Use the sun/moon button beside the Penny logo to switch between light and dark mode. The first visit follows the device color scheme; an explicit choice is saved separately as `penny.theme.v1` in this browser. If storage is unavailable, switching still works for the current session. The theme initializes before the styles load and also updates native date/time controls.
+
+Phones use labeled bottom navigation, stacked transaction cards, larger touch controls, single-column forms, and safe-area spacing. Incoming time/channel/search filters can be expanded when needed; the hourly chart scrolls horizontally on phones. All web features remain available in a mobile browser. These changes do not add native Android SMS access or produce an APK.
+
+The local server uses port 5173 by default. Set `PENNY_PORT` to use a different available port.
+
 ## Data and limitations
 
 Transactions and bank rules live in browser localStorage for this origin and browser profile. They are not uploaded, synced, or encrypted by this prototype. Clearing browser/site data removes them. Export CSV for records; CSV is not currently a restorable backup. Receipt images are used transiently and are not stored. Third-party requests download Google Fonts and Tesseract OCR code/models, not your SMS or images. OCR first use needs internet. The app is not currently a fully offline PWA.

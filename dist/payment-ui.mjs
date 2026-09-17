@@ -22,6 +22,7 @@ export function initPayments({getState,changed,escape,money,icon,toast,setView})
       <label>Bank<select id="payment-bank"><option value="all">All banks</option></select></label>
       <label>Month<input id="payment-month" type="month"></label>
       <label>Specific day<input id="payment-day" type="date"></label>
+      <details class="payment-advanced" ${window.matchMedia('(min-width:701px)').matches?'open':''}><summary>Time, channel & search filters</summary><div class="payment-advanced-fields">
       <label>Time zone<select id="payment-zone"><option value="Asia/Ho_Chi_Minh">Vietnam · UTC+07</option><option value="Asia/Seoul">Korea · UTC+09</option></select></label>
       <label>Analyze using<select id="payment-basis"><option value="transaction">Bank transaction time</option><option value="received">SMS arrival time</option></select></label>
       <label>Part of day<select id="payment-period"><option value="all">All times</option><option>Night</option><option>Morning</option><option>Afternoon</option><option>Evening</option><option>Unknown</option></select></label>
@@ -30,6 +31,7 @@ export function initPayments({getState,changed,escape,money,icon,toast,setView})
       <label>To time<input id="payment-to" type="time" step="0.001"></label>
       <label>Order<select id="payment-sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
       <label>Find a payment<input id="payment-query" type="search" placeholder="Payer, reference, memo…"></label>
+      </div></details>
       <button id="payment-clear-filters" type="button" class="text-button">Reset filters</button>
     </form>
     <div class="payment-stats" aria-label="Incoming payment summary"><article class="stat-card featured"><div class="stat-title">Money received</div><h2 id="payment-total">₫0</h2><p id="payment-count" class="stat-detail">0 payments</p></article><article class="stat-card"><div class="stat-title">Busiest hour</div><h2 id="payment-peak">—</h2><p id="payment-peak-note" class="stat-detail">No timed payments</p></article><article class="stat-card"><div class="stat-title">Millisecond timestamps</div><h2 id="payment-precise">0</h2><p id="payment-unknown" class="stat-detail">0 without time</p></article></div>

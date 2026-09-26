@@ -40,3 +40,11 @@ The native Android SMS integration and local Android database have not been impl
 - Browser: invalid pasted JSON was rejected. Restoring a synthetic KRW 2,500 flagged grocery entry preserved the existing budget and changed remaining budget to KRW 1,000. Repeating the preview reported zero additions and one duplicate. Review entries displayed only that flagged record.
 - All four routes fit a 320-pixel browser viewport without document horizontal overflow. Manual-entry and backup dialogs have no internal horizontal overflow at that width. Physical mobile devices and software keyboards have not been tested.
 - No genuine financial records were used in verification or placed in the repository. GitHub Pages deployment is verified separately from local test success.
+
+## Review fixes — 26 September 2026
+
+- All 60 automated tests pass, including 16 new review regressions. Coverage includes five formerly failing reproduction cases, competing/queued saves, stale restores after deletion, unsupported lock handling, legacy fingerprints, ambiguous arrivals, debit/refund direction and historical dates.
+- Browser, separate localhost origin with synthetic records: two purchases totaling KRW 7,500 remain after an older tab changes currency. Attempting to add from the stale tab shows the temporary-changes warning; the latest persisted records remain intact after reload.
+- Browser SMS import: four records are found, including both VND 250,000 payments at bank time 14:32 with different SMS arrival milliseconds. Both candidates show the ambiguity warning. An outgoing buyer refund is an expense, and the Korean 08/31 12:35 message retains August 31.
+- Saving and reloading keeps VND spending at 250,000, money in at 500,000 and net cash flow at 250,000. No actual SMS, financial records or receipt photos were used.
+- A pasted backup adds one synthetic VND 1,000 expense and survives reload. The incoming page still lists both bank payments. At a 390-pixel viewport, content and client widths are both 375 pixels; no horizontal overflow or browser console errors/warnings were observed.

@@ -4,6 +4,19 @@ const clean = s => String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
 const pad=n=>String(n).padStart(2,'0');
 export const paymentZone=currency=>currency==='VND'?'Asia/Ho_Chi_Minh':'Asia/Seoul';
 export function realDate(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const d=new Date(value+'T00:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}
+export function messageDate(text,fallback,currency='KRW') {
+  let m=text.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  let value=m?`${m[1]}-${pad(m[2])}-${pad(m[3])}`:null;
+  if(!m){m=text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b/);if(m)value=`${m[3]}-${pad(m[2])}-${pad(m[1])}`;}
+  if(value)return {date:realDate(value)?value:fallback,inferred:!realDate(value),invalid:!realDate(value)};
+  m=text.match(/(?:^|\s)(\d{1,2})[/.](\d{1,2})(?=\s|$)/);
+  if(m){value=`${fallback.slice(0,4)}-${pad(m[currency==='VND'?2:1])}-${pad(m[currency==='VND'?1:2])}`;return {date:realDate(value)?value:fallback,inferred:true,invalid:!realDate(value)};}
+  return {date:fallback,inferred:true,invalid:false};
+}
+// User-authored memo/name fields cannot establish bank debit/credit direction.
+export function bankSignalText(raw) {
+  return clean(raw).replace(/(?:\b(?:nd|noi dung|memo|note|payer|from|merchant)|메모|적요|입금자|보낸분|보낸사람|송금인|가맹점|사용처)\s*[:：]\s*[^\n;]*/g,'');
+}
 export function readInstant(value,zone='Asia/Seoul'){
   if(value==null||value==='')return null;
   if(typeof value==='number'||/^\d{13}$/.test(String(value))){const n=Number(value);if(!Number.isSafeInteger(n)||n<0||n>4102444800000)return null;return {epochMs:n,precision:'millisecond',fractionDigits:3,assumedZone:false};}
@@ -26,31 +39,31 @@ export function smsTiming(message,raw,currency,fallbackDate){
   const zone=PAYMENT_ZONES[message.timeZone]?message.timeZone:paymentZone(currency);
   const receivedValue=message.receivedAt??message.timestamp??message.date;
   const receivedTime=readInstant(receivedValue,zone);
-  const dateMatch=raw.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/)||null;
-  const vnMatch=!dateMatch&&raw.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b/);
   const receivedDate=timeParts(receivedTime,zone)?.date;
-  const textDate=dateMatch?`${dateMatch[1]}-${pad(dateMatch[2])}-${pad(dateMatch[3])}`:vnMatch?`${vnMatch[3]}-${pad(vnMatch[2])}-${pad(vnMatch[1])}`:null;
+  const metadataDate=typeof message.date==='string'&&realDate(message.date)?message.date:null;
+  const detected=messageDate(raw,metadataDate||receivedDate||fallbackDate,currency);
   const clock=raw.match(/\b\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?/);
-  const baseDate=textDate||receivedDate||fallbackDate;
-  const transactionTime=message.transactionAt!=null?readInstant(message.transactionAt,zone):clock?readInstant(`${baseDate}T${clock[0]}`,zone):null;
-  return {timeZone:zone,transactionTime,receivedTime,timingDate:transactionTime?timeParts(transactionTime,zone).date:receivedDate||fallbackDate,invalidTimestamp:(message.transactionAt!=null||!!clock)&&!transactionTime,timeDateAssumed:!!transactionTime&&!textDate&&message.transactionAt==null};
+  const transactionTime=message.transactionAt!=null?readInstant(message.transactionAt,zone):clock&&!detected.invalid?readInstant(`${detected.date}T${clock[0]}`,zone):null;
+  return {timeZone:zone,transactionTime,receivedTime,timingDate:transactionTime?timeParts(transactionTime,zone).date:detected.date,invalidTimestamp:(message.transactionAt!=null||!!clock)&&!transactionTime,timeDateAssumed:!!transactionTime&&detected.inferred&&message.transactionAt==null};
 }
 export function transferFacts(raw,type){
-  const s=clean(raw);
+  const s=bankSignalText(raw);
   const positive=/(?:gd|giao dich)\s*[:=]?\s*\+|\+\s*[\d.,]+\s*(?:vnd|krw|d\b)|\bcredited\b|\breceived\b|입금|ghi co|nhan tien/.test(s);
   const negative=/(?:gd|giao dich)\s*[:=]?\s*-|[-−]\s*[\d.,]+\s*(?:vnd|krw|d\b)|\bdebited\b|\bwithdraw|출금|ghi no/.test(s);
   const payerMatch=raw.match(/(?:보낸분|보낸사람|입금자|송금인|người\s*(?:gửi|chuyển)|nguoi\s*(?:gui|chuyen)|from|payer)\s*[:：]?\s*([^;\n.]+?)(?=\s+(?:ND|nội dung|noi dung|ref|memo|note|잔액|계좌|account|balance|on|at)\b|[;\n.]|$)/i);
   const reference=raw.match(/(?:ref(?:erence)?|거래번호|mã\s*(?:gd|giao dịch)|ma\s*(?:gd|giao dich))\s*[:：#]?\s*([a-z0-9_-]+)/i)?.[1]||'';
   const account=raw.match(/(?:계좌|account|\bTK)\s*[:：]?\s*([\dxX*•-]{4,30})/i)?.[1]||'';
   const memo=raw.match(/(?:메모|적요|\bND|nội dung|noi dung|memo|note)\s*[:：]\s*([^\n]+?)(?=\s*(?:;|\.)\s*(?:ref|거래번호|balance|so du|số dư)|\n|$)/i)?.[1]?.trim()||'';
-  const own=/own accounts?|self transfer|본인계좌|내계좌|chuyen tien noi bo/.test(s);
+  const own=/own accounts?|self transfer|본인계좌|내계좌|chuyen tien noi bo/.test(clean(raw));
   const incoming=(positive&&!negative||type==='income')&&type!=='refund';
-  return {positive,negative,incomingTransfer:incoming,payer:payerMatch?.[1]?.trim().slice(0,100)||'',reference:reference.slice(0,80),account:account.slice(0,30),paymentMemo:memo.slice(0,300),paymentChannel:/\bfacebook\b|\bfb\b|페이스북/.test(s)?'Facebook':/\bdirect transfer\b/.test(s)?'Direct transfer':'Unclassified',ownAccount:own};
+  return {positive,negative,incomingTransfer:incoming,payer:payerMatch?.[1]?.trim().slice(0,100)||'',reference:reference.slice(0,80),account:account.slice(0,30),paymentMemo:memo.slice(0,300),paymentChannel:/\bfacebook\b|\bfb\b|페이스북/.test(clean(raw))?'Facebook':/\bdirect transfer\b/.test(clean(raw))?'Direct transfer':'Unclassified',ownAccount:own};
 }
+export function coarsePaymentKey(t){return !t.reference&&t.transactionTime&&t.transactionTime.fractionDigits<3?`sms-time|${t.transactionTime.epochMs}|${clean(t.raw).replace(/\s+/g,' ').trim()}`:null;}
 export function paymentIdentity(t){
   if(t.source==='receipt')return null;
   const raw=clean(t.raw).replace(/\s+/g,' ').trim();
   if(t.reference)return `bank-ref|${clean(t.bank)}|${clean(t.account)}|${clean(t.reference)}|${t.currency}|${t.type}|${t.amount}`;
+  if(coarsePaymentKey(t)&&t.receivedTime)return `sms-event|${t.transactionTime.epochMs}|${t.transactionTime.precision}|${t.transactionTime.fractionDigits}|${t.receivedTime.epochMs}|${raw}`;
   const clock=t.transactionTime||t.receivedTime;
   return clock?`sms-time|${clock.epochMs}|${raw}`:null;
 }

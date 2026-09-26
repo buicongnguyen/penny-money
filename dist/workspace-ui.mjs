@@ -40,11 +40,11 @@ export function initWorkspace({getState,restore,commit,changed,escape,money,icon
     $('manual-demo-note').textContent=getState().demo?'Saving your first entry replaces the example transactions.':'Saved only in this browser. Transfers between your own accounts are excluded from income and spending.';
     manualType();manualCurrency();manual.showModal();$('manual-merchant').focus();
   };
-  $('manual-form').onsubmit=e=>{
+  $('manual-form').onsubmit=async e=>{
     e.preventDefault();const currency=$('manual-currency').value,type=$('manual-type').value,value=Number($('manual-amount').value);
     const merchant=$('manual-merchant').value.trim(),bank=$('manual-bank').value.trim(),date=$('manual-date').value;
     if(!merchant||!bank||!validDate(date)||!Number.isFinite(value)||value<=0||value>1e12||['KRW','VND'].includes(currency)&&!Number.isInteger(value)){$('manual-error').textContent='Check the name, account, date and amount. Won and dong must be whole numbers.';return;}
-    commit([{id:crypto.randomUUID(),merchant,bank,date,currency,type,amount:value,category:type==='expense'?$('manual-category').value:({income:'Income',refund:'Refund',transfer:'Transfer'})[type],source:'manual',raw:$('manual-note').value.trim(),warnings:[],incomingTransfer:false,ownAccount:type==='transfer'}]);
+    await commit([{id:crypto.randomUUID(),merchant,bank,date,currency,type,amount:value,category:type==='expense'?$('manual-category').value:({income:'Income',refund:'Refund',transfer:'Transfer'})[type],source:'manual',raw:$('manual-note').value.trim(),warnings:[],incomingTransfer:false,ownAccount:type==='transfer'}]);
     manual.close();toast('Transaction added.');
   };
 
@@ -60,12 +60,12 @@ export function initWorkspace({getState,restore,commit,changed,escape,money,icon
     const whole=['KRW','VND'].includes(s.currency);$('budget-amount').step=whole?'1':'0.01';$('budget-amount').min=whole?'1':'0.01';
     $('remove-budget').classList.toggle('hidden',!s.budgets?.[budgetKey]);$('budget-error').textContent='';budgetDialog.showModal();$('budget-amount').focus();
   };
-  $('budget-form').onsubmit=e=>{
+  $('budget-form').onsubmit=async e=>{
     e.preventDefault();const value=Number($('budget-amount').value),currency=budgetKey.split(':')[1];
     if(!Number.isFinite(value)||value<=0||value>1e12||['KRW','VND'].includes(currency)&&!Number.isInteger(value)){$('budget-error').textContent='Enter a positive amount. Won and dong must be whole numbers.';return;}
-    getState().budgets={...getState().budgets,[budgetKey]:value};changed();budgetDialog.close();toast('Monthly budget saved.');
+    getState().budgets={...getState().budgets,[budgetKey]:value};await changed();budgetDialog.close();toast('Monthly budget saved.');
   };
-  $('remove-budget').onclick=()=>{delete getState().budgets[budgetKey];changed();budgetDialog.close();toast('Budget removed.');};
+  $('remove-budget').onclick=async()=>{delete getState().budgets[budgetKey];await changed();budgetDialog.close();toast('Budget removed.');};
   $('review-entries').onclick=()=>{$('review-filter').value='review';$('search').value='';$('category-filter').value='all';setView('transactions');};
 
   function download(content,name){const url=URL.createObjectURL(new Blob([content],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -87,16 +87,16 @@ export function initWorkspace({getState,restore,commit,changed,escape,money,icon
       $('backup-preview').classList.remove('hidden');$('restore-backup').classList.remove('hidden');
     } catch(err){$('backup-error').textContent=err.message;}
   };
-  $('restore-backup').onclick=()=>{
+  $('restore-backup').onclick=async()=>{
     if(!restoreCandidate)return;
-    try {const result=mergeBackup(getState(),restoreCandidate);restore(result.data);resetPreview();backup.close();toast(`Restored ${result.added} transactions. ${result.skipped} duplicates skipped.`);}catch(err){$('backup-error').textContent=err.message;}
+    try {const result=mergeBackup(getState(),restoreCandidate);await restore(result.data);resetPreview();backup.close();toast(`Restored ${result.added} transactions. ${result.skipped} duplicates skipped.`);}catch(err){$('backup-error').textContent=err.message;}
   };
   let deleted=null;
-  $('undo-delete').onclick=()=>{
+  $('undo-delete').onclick=async()=>{
     if(!deleted)return;const s=getState();
     if(s.demo!==deleted.demo){deleted=null;undo.classList.add('hidden');toast('The workspace changed; this deletion can no longer be undone.');return;}
     if(!s.transactions.some(t=>t.id===deleted.row.id))s.transactions.push(deleted.row);
-    deleted=null;undo.classList.add('hidden');changed();toast('Transaction restored.');
+    deleted=null;undo.classList.add('hidden');await changed();toast('Transaction restored.');
   };
   return {
     rememberDeleted(row){deleted={row:structuredClone(row),demo:getState().demo};undo.classList.remove('hidden');},

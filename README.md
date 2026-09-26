@@ -24,6 +24,10 @@ Source precision is preserved: `14:32`, `14:32:18`, and `14:32:18.123` remain vi
 
 References identify duplicate notifications. Without a reference, available event timestamps participate in duplicate detection so otherwise identical messages received at different milliseconds survive. A reference is scoped by bank, account, currency, direction, and amount. Older date-only imports remain readable. Data that was discarded by the original prototype cannot be recovered retroactively.
 
+When bank time has only minute, second, or partial-millisecond precision, distinct SMS arrival timestamps are retained as separate review candidates. Matching coarse bank times and message bodies receive a warning rather than silently discarding one payment. Exact repeated notifications and matching bank references are still skipped. Legacy fingerprints are handled without merging distinct arrival timestamps during backup restore.
+
+Korean month/day and Vietnamese day/month dates use the selected or supplied year and remain flagged when inferred. Date-only JSON metadata supplies the date when a message includes only a clock; SMS arrival remains separate. Explicit bank debits stay money out even when a buyer refund is mentioned. Memo/name fields do not establish debit/credit direction.
+
 Facebook labels are suggested only from an explicit message keyword, or set by the user. Bank messages are not independently verified against a Facebook order or a bank. Incoming credits count as money in; marking a record as between your own accounts excludes it from income. Its kind can be changed back through Transactions. Payment-list CSV exports include both timestamp values, precision, selected zone, and simulation status.
 
 ## Appearance and mobile use
@@ -39,6 +43,8 @@ The local server uses port 5173 by default. Set `PENNY_PORT` to use a different 
 Transactions, budgets and bank rules live in browser localStorage for this origin and browser profile. They are not uploaded, synced, or encrypted by this prototype. Clearing browser/site data removes them. JSON backups are restorable; CSV is a filtered report only. Backups retain original message text and bank/SMS timestamps. Restore merges personal records, skips matching IDs/SMS fingerprints, preserves existing edits and budget limits, and replaces example records when starting from demo mode. Invalid stored data is protected from automatic overwrites and can be downloaded for recovery. Receipt images are transient and are not stored. Third-party requests download Google Fonts and Tesseract OCR code/models, not your SMS or images. OCR first use needs internet. The app is not currently a fully offline PWA.
 
 Moving from the previous Sites address to GitHub Pages creates a new browser storage origin. Existing records do not move automatically: restore a Penny JSON backup where available, or reimport original SMS files. CSV does not preserve every field. GitHub Pages project paths on one account share an origin; only host trusted apps alongside a local-data application.
+
+Month/currency preferences use a separate storage key and never rewrite the ledger. Ledger and restore writes use Web Locks plus a saved-snapshot check to prevent an older tab from overwriting newer records. A stale tab shows a warning and keeps its edits temporary: download a JSON backup if needed, reload the latest records, and review any restore. Deletions are not automatically merged or resurrected. Browsers without Web Locks cannot persist edits but can download temporary records as JSON. Refresh all open Penny tabs after updating the app so every tab uses the current save safeguards. These fixes do not automatically rewrite historical records or recover transactions discarded by older versions.
 
 ## GitHub Pages
 

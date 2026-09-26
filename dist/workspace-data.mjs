@@ -1,4 +1,4 @@
-import {CURRENCIES,CATEGORIES,validDate,localDate,fingerprint} from './domain.mjs';
+import {CURRENCIES,CATEGORIES,validDate,localDate,transactionKeys} from './domain.mjs';
 
 export const validMonth = value => typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value) && validDate(value+'-01');
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -68,19 +68,30 @@ export function readBackup(content) {
   // Also accepts an exported copy of the original penny.local.v1 data.
   return validateWorkspace(parsed);
 }
-export function createWorkspaceStore(storage,key='penny.local.v1') {
-  let data=null,recovery=null,blocked=false,error=null;
-  try {const saved=storage.getItem(key);if(saved){recovery=saved;data=validateWorkspace(JSON.parse(saved));recovery=null;}}
+export const WORKSPACE_CONFLICT='Another tab changed your records. Download a JSON backup of any unsaved changes in this tab, then reload to use the latest saved records.';
+export function createWorkspaceStore(storage,key='penny.local.v1',locks=null) {
+  let data=null,recovery=null,blocked=false,error=null,snapshot=null;
+  try {snapshot=storage.getItem(key);if(snapshot){recovery=snapshot;data=validateWorkspace(JSON.parse(snapshot));recovery=null;}}
   catch {blocked=true;error='Saved data could not be loaded. Changes are temporary; the original data is protected. Use Backup & restore to download it or restore a valid backup.';}
+  function save(state,{restore=false}={}) {
+    if(blocked&&!restore)throw new Error(error);
+    const next=validateWorkspace(state);
+    if(storage.getItem(key)!==snapshot)throw Object.assign(new Error(WORKSPACE_CONFLICT),{code:'WORKSPACE_CONFLICT'});
+    const serialized=JSON.stringify(next);
+    storage.setItem(key,serialized);snapshot=serialized;
+    if(restore){blocked=false;recovery=null;error=null;}
+    return next;
+  }
   return {
     data,error,
     get recovery(){return recovery;},
-    save(state,{restore=false}={}) {
-      if(blocked&&!restore)throw new Error(error);
+    isStale(){return storage.getItem(key)!==snapshot;},
+    save,
+    async saveLocked(state,options) {
+      if(!locks?.request)throw new Error('This browser cannot safely save across tabs. Use an updated browser over HTTPS, or download a JSON backup of your temporary changes.');
       const next=validateWorkspace(state);
-      storage.setItem(key,JSON.stringify(next));
-      if(restore){blocked=false;recovery=null;error=null;}
-      return next;
+      // Serialize the compare-and-write across tabs; retain each queued local edit.
+      return locks.request(key+':write',()=>save(next,options));
     }
   };
 }
@@ -89,10 +100,10 @@ export function mergeBackup(current,incoming) {
   if(target.demo) return {data:source,added:source.transactions.length,skipped:0,replacesDemo:true};
   requireValue(!source.demo,'A demo backup cannot be merged into your personal records.');
   const ids=new Set(target.transactions.map(t=>t.id));
-  const keys=new Set(target.transactions.filter(t=>t.source!=='manual').flatMap(t=>[t.fingerprint,fingerprint(t)].filter(Boolean)));
+  const keys=new Set(target.transactions.filter(t=>t.source!=='manual').flatMap(transactionKeys));
   const added=[];
   for(const t of source.transactions) {
-    const identities=t.source==='manual'?[]:[t.fingerprint,fingerprint(t)].filter(Boolean);
+    const identities=t.source==='manual'?[]:transactionKeys(t);
     if(ids.has(t.id)||identities.some(k=>keys.has(k))) continue;
     ids.add(t.id); identities.forEach(k=>keys.add(k)); added.push(t);
   }

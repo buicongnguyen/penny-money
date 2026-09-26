@@ -1,4 +1,4 @@
-import {smsTiming,transferFacts,paymentIdentity,timeParts} from './payments.mjs';
+import {smsTiming,transferFacts,paymentIdentity,timeParts,messageDate,bankSignalText,coarsePaymentKey} from './payments.mjs';
 export const CURRENCIES = ['KRW', 'VND', 'USD', 'EUR', 'GBP', 'INR', 'SGD', 'AUD'];
 export const CATEGORIES = ['Food & drinks', 'Groceries', 'Shopping', 'Transport', 'Bills & home', 'Health', 'Entertainment', 'Travel', 'Other', 'Income', 'Refund', 'Transfer'];
 export const BANK_RULES = [
@@ -35,15 +35,7 @@ export function extractAmounts(text,currency){
   for(const m of text.matchAll(rx)){const amount=parseAmount(m[1]||m[2],currency);if(amount){const before=normalize(text.slice(Math.max(0,m.index-24),m.index));const balance=/(?:balance|bal\.?|so du|sd|잔액|누적|han muc)\s*[:=]?\s*$/.test(before);result.push({amount,index:m.index,raw:m[0],balance});}}
   return result;
 }
-export function detectDate(text,fallback=localDate()){
-  let m=text.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
-  if(m){const value=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;return {date:validDate(value)?value:fallback,inferred:!validDate(value)};}
-  m=text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b/);
-  if(m){const value=`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;return {date:validDate(value)?value:fallback,inferred:!validDate(value)};}
-  m=text.match(/(?:^|\s)(\d{1,2})[/.](\d{1,2})(?:\s|$)/);
-  if(m){const value=`${fallback.slice(0,4)}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;if(validDate(value))return {date:value,inferred:true};}
-  return {date:fallback,inferred:true};
-}
+export const detectDate=(text,fallback=localDate(),currency='KRW')=>messageDate(text,fallback,currency);
 export function categorize(text,type='expense'){
   if(type==='income')return 'Income';if(type==='refund')return 'Refund';if(type==='transfer')return 'Transfer';
   const s=normalize(text);const groups=[
@@ -69,9 +61,15 @@ function merchantName(text,bank){
   return 'Unidentified transaction';
 }
 export const fingerprint=t=>paymentIdentity(t)||`${t.source||'sms'}|${t.date}|${normalize(t.raw).replace(/\s+/g,' ').trim()}`;
+export function transactionKeys(t){
+  const current=fingerprint(t),stored=t.fingerprint;
+  // Old coarse-clock identities must not collapse records with distinct arrivals.
+  const obsolete=current.startsWith('sms-event|')&&stored?.startsWith('sms-time|');
+  return [...new Set([current,...(stored&&!obsolete?[stored]:[])])];
+}
 export function parseSms(message,{currency='KRW',date=localDate(),rules=BANK_RULES}={}){
   const obj=typeof message==='string'?{body:message}:message;
-  const raw=String(obj.body??obj.text??obj.message??'').trim(); const s=normalize(raw);
+  const raw=String(obj.body??obj.text??obj.message??'').trim(); const s=bankSignalText(raw);
   const skip=reason=>({status:'skipped',reason,raw});
   if(!raw)return skip('Empty message');
   if(/\botp\b|one.time.password|verification code|인증번호|인증코드|ma xac (?:thuc|nhan)|ma otp/.test(s))return skip('Verification code');
@@ -86,20 +84,20 @@ export function parseSms(message,{currency='KRW',date=localDate(),rules=BANK_RUL
   if(!expense&&!income&&!refund)return skip('No completed transaction found');
   if(!amounts.length)return skip('Transaction amount not recognized');
   const facts=transferFacts(raw,refund?'refund':income&&!expense?'income':'expense');
-  let type=refund?'refund':facts.positive&&!facts.negative?'income':income&&!expense?'income':'expense';
+  let type=facts.negative&&!facts.positive?'expense':refund?'refund':facts.positive&&!facts.negative?'income':income&&!expense?'income':'expense';
   if(facts.ownAccount)type='transfer';
   const timing=smsTiming(obj,raw,cur,date);
   let suppliedDate=obj.date;
   if(timing.receivedTime)suppliedDate=timeParts(timing.receivedTime,timing.timeZone).date;
   const hasMetadata=typeof suppliedDate==='string'&&validDate(suppliedDate.slice(0,10));
-  const detected=detectDate(raw,hasMetadata?suppliedDate.slice(0,10):date);
+  const detected=detectDate(raw,hasMetadata?suppliedDate.slice(0,10):date,cur);
   const merchant=type==='income'&&facts.payer?facts.payer:merchantName(raw,bank);
   const warnings=[];
   if(bank==='Unknown bank')warnings.push('Check bank');
   if(detected.inferred&&!hasMetadata)warnings.push('Check date');
   if(merchant==='Unidentified transaction')warnings.push('Add merchant');
   if(amounts.length>1)warnings.push('Multiple amounts: check total');
-  if(income&&expense&&!refund&&!(facts.positive&&!facts.negative))warnings.push('Check transaction type');
+  if(facts.positive&&facts.negative||income&&expense&&!refund&&!(facts.positive&&!facts.negative))warnings.push('Check transaction type');
   if(timing.invalidTimestamp)warnings.push('Invalid transaction timestamp');
   if(timing.timeDateAssumed)warnings.push('Time found; check the assumed date');
   if(/transfer|이체|chuyen (?:khoan|tien)/.test(s))warnings.push('If between your own accounts, choose Transfer');
@@ -108,8 +106,12 @@ export function parseSms(message,{currency='KRW',date=localDate(),rules=BANK_RUL
 }
 export function parseBatch(messages,options={},existing=[]){
   if(!Array.isArray(messages)||messages.length>5000)throw new Error('Import up to 5,000 messages at a time.');
-  const seen=new Set(existing.flatMap(t=>[t.fingerprint,fingerprint(t)].filter(Boolean)));const transactions=[],skipped=[];
-  for(const m of messages){const result=parseSms(m,options);if(result.status==='skipped'){skipped.push(result);continue;}const t=result.transaction;if(seen.has(t.fingerprint)){skipped.push({raw:t.raw,reason:'Duplicate message'});continue;}seen.add(t.fingerprint);transactions.push(t);}
+  const seen=new Set(existing.flatMap(transactionKeys));const transactions=[],skipped=[];
+  const coarse=new Map(existing.map(t=>[coarsePaymentKey(t),null]).filter(([key])=>key));
+  for(const m of messages){const result=parseSms(m,options);if(result.status==='skipped'){skipped.push(result);continue;}const t=result.transaction;if(seen.has(t.fingerprint)){skipped.push({raw:t.raw,reason:'Duplicate message'});continue;}seen.add(t.fingerprint);
+    const key=coarsePaymentKey(t);
+    if(key){if(coarse.has(key)){const warning='Same bank time and message: check whether these are separate payments';t.warnings.push(warning);const prior=coarse.get(key);if(prior&&!prior.warnings.includes(warning))prior.warnings.push(warning);}coarse.set(key,t);}
+    transactions.push(t);}
   return {transactions,skipped};
 }
 export function summarize(transactions,{month,bank='all',currency='KRW'}={}){
@@ -128,7 +130,7 @@ export function receiptSuggestion(text,{currency='KRW',date=localDate()}={}){
     amounts.forEach(a=>candidates.push({amount:a.amount,priority,index}));});
   candidates.sort((a,b)=>b.priority-a.priority||b.amount-a.amount);
   const merchant=lines.slice(0,7).find(l=>/[a-zA-Z가-힣À-ỹ]/.test(l)&&!/^receipt$|^영수증$|^hoa don$|tax invoice|사업자|영수증번호|tel|전화|\d{2}[:/.-]\d{2}/i.test(l))||'';
-  return {merchant:merchant.slice(0,100),amount:candidates[0]?.amount??'',currency:cur,date:detectDate(text,date).date,category:categorize(merchant),type:'expense',bank:'Cash / receipt',source:'receipt',raw:text,warnings:['Review OCR amount, merchant, and date'],alternatives:[...new Set(candidates.map(c=>c.amount))].slice(0,5)};
+  return {merchant:merchant.slice(0,100),amount:candidates[0]?.amount??'',currency:cur,date:detectDate(text,date,cur).date,category:categorize(merchant),type:'expense',bank:'Cash / receipt',source:'receipt',raw:text,warnings:['Review OCR amount, merchant, and date'],alternatives:[...new Set(candidates.map(c=>c.amount))].slice(0,5)};
 }
 export function demoTransactions(){
   const month=localDate().slice(0,7);const prev=new Date();prev.setDate(1);prev.setMonth(prev.getMonth()-1);const pm=localDate(prev).slice(0,7);

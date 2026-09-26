@@ -1,9 +1,12 @@
 # Penny — web prototype
 
-A responsive, device-local spending tracker for South Korea and Vietnam. Open the hosted prototype or run `node server.mjs` and visit http://127.0.0.1:5173. No build or installation is needed. Run parser checks with `node --test tests/domain.test.mjs`.
+A responsive, device-local spending tracker for South Korea and Vietnam. Run `node server.mjs` and visit http://127.0.0.1:5173. No build or installation is needed. Run all checks with `node --test tests/*.test.mjs`.
 
 ## Try it
 
+- Use **Add transaction** for a purchase, income, refund or transfer without needing an SMS or receipt. The latest transaction deletion can be undone in the current session.
+- Set a monthly budget for each currency. Budgets cover all accounts; the comparison card follows the selected bank and compares matching days for the current month. Use **Review entries** to find flagged records.
+- Use **Backup & restore** to download a complete JSON backup, preview a restore and merge records without overwriting existing edits. Keep backup files private: they include original SMS text.
 - Starts with clearly labeled synthetic KRW and VND demo transactions. The currency selector keeps totals separate; no exchange conversion is applied.
 - Import SMS by pasting messages separated by blank lines, or selecting TXT, JSON, or SMS Backup & Restore XML. JSON accepts an array of `{ "body": "...", "sender": "...", "date": "2026-09-17" }`; Android millisecond timestamps are accepted too.
 - Preview and correct the merchant, amount, bank, date, type, category, and currency before saving. Saving the first real import or receipt replaces demo transactions.
@@ -33,7 +36,17 @@ The local server uses port 5173 by default. Set `PENNY_PORT` to use a different 
 
 ## Data and limitations
 
-Transactions and bank rules live in browser localStorage for this origin and browser profile. They are not uploaded, synced, or encrypted by this prototype. Clearing browser/site data removes them. Export CSV for records; CSV is not currently a restorable backup. Receipt images are used transiently and are not stored. Third-party requests download Google Fonts and Tesseract OCR code/models, not your SMS or images. OCR first use needs internet. The app is not currently a fully offline PWA.
+Transactions, budgets and bank rules live in browser localStorage for this origin and browser profile. They are not uploaded, synced, or encrypted by this prototype. Clearing browser/site data removes them. JSON backups are restorable; CSV is a filtered report only. Backups retain original message text and bank/SMS timestamps. Restore merges personal records, skips matching IDs/SMS fingerprints, preserves existing edits and budget limits, and replaces example records when starting from demo mode. Invalid stored data is protected from automatic overwrites and can be downloaded for recovery. Receipt images are transient and are not stored. Third-party requests download Google Fonts and Tesseract OCR code/models, not your SMS or images. OCR first use needs internet. The app is not currently a fully offline PWA.
+
+Moving from the previous Sites address to GitHub Pages creates a new browser storage origin. Existing records do not move automatically: restore a Penny JSON backup where available, or reimport original SMS files. CSV does not preserve every field. GitHub Pages project paths on one account share an origin; only host trusted apps alongside a local-data application.
+
+## GitHub Pages
+
+The source remote uses SSH: `git@github.com:buicongnguyen/penny-money.git`. The workflow in `.github/workflows/pages.yml` runs the tests and syntax checks on pushes to `main`. It packages only `dist/`, with relative assets and hash routes that work under a project subpath. No backend, credentials, user records or build dependencies are needed at runtime.
+
+In repository Settings → Pages, choose GitHub Actions. Set the repository Actions variable `PAGES_ENABLED` to `true` once Pages is available for the repository, then run the workflow or push to `main`. This gate lets tests run before publication is enabled. The deployment job requires the standard `pages: write` and `id-token: write` permissions. The old `.openai/hosting.json` is retained as historical project metadata and is not in the published directory.
+
+GitHub Free requires a public repository for Pages; private repositories require a supported paid plan. Hosting configuration follows [GitHub's custom workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
 OCR uses Tesseract.js 6.0.1 in a web worker. It suggests values and does not silently book them. Blurry photos, complex layouts, OCR errors, and unknown bank templates need correction. Amount extraction is a rules-based prototype, not an exhaustive set of certified bank parsers. Unrecognized SMS are shown as skipped. SMS sender matching does not authenticate a bank. Date-only messages use a user-selected fallback date/year and are flagged. Card refunds count as money in, while spending is gross purchases. Transfers are excluded from both spending and income. Duplicate SMS body/date pairs are skipped. A receipt and an SMS for the same purchase are not automatically reconciled.
 

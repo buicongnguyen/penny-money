@@ -30,3 +30,13 @@ The native Android SMS integration and local Android database have not been impl
 - At 320 pixels, SMS import, receipt scanner, and incoming simulator dialogs fit their available widths; the transaction editor also fits at 390 pixels. Form fields use 16-pixel text and modal content scrolls vertically.
 - Incoming advanced filters expand; choosing Facebook changes the simulation from 9 to 7 matching KRW payments. Time inputs retain the 0.001-second step. The hourly chart has its own horizontal scroll region and 44-pixel-wide targets on phones.
 - Browser console contained no errors or warnings. Responsive checks used browser viewport emulation, not a physical Android/iOS device or a software keyboard.
+
+## Evaluation improvements — 26 September 2026
+
+- 44 tests pass: 33 existing domain/payment regressions and 11 backup, restore, storage-safety and comparison tests. All runtime JavaScript passes syntax checks.
+- Browser: added a synthetic KRW 6,500 manual expense, set a KRW 10,000 monthly budget, and reloaded. Spending stayed KRW 6,500 and remaining budget stayed KRW 3,500. The list identifies it as Manual entry.
+- Browser: deleted and undid that synthetic transaction. The record, totals and remaining budget were restored.
+- Browser: downloaded `penny-backup-2026-09-26.json` and validated the actual local file with the backup parser: one record and the KRW 10,000 budget were present.
+- Browser: invalid pasted JSON was rejected. Restoring a synthetic KRW 2,500 flagged grocery entry preserved the existing budget and changed remaining budget to KRW 1,000. Repeating the preview reported zero additions and one duplicate. Review entries displayed only that flagged record.
+- All four routes fit a 320-pixel browser viewport without document horizontal overflow. Manual-entry and backup dialogs have no internal horizontal overflow at that width. Physical mobile devices and software keyboards have not been tested.
+- No genuine financial records were used in verification or placed in the repository. GitHub Pages deployment is verified separately from local test success.

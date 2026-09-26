@@ -2,4 +2,8 @@
 node_modules/
 *.zip
 .env
+.env.*
+backups/
+penny-backup-*.json
+penny-recovery-*.json
 test-results/

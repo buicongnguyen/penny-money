@@ -32,6 +32,10 @@ Facebook labels are suggested only from an explicit message keyword, or set by t
 
 ## Appearance and mobile use
 
+Choose **Language → Tiếng Việt** in the top bar for Vietnamese, or **English** to switch back. On a first visit, Penny follows Vietnamese if it is the browser's primary language, otherwise English. An explicit choice is saved separately as `penny.language.v1`; switching language never saves or modifies the financial workspace. Labels, validation messages, categories, summaries and transaction dates/currency formatting follow the selected language. Native date/time picker controls follow the browser or operating system locale.
+
+Original SMS, receipt text, payer/merchant names, bank names and notes remain as entered. Category/type/channel identifiers and JSON/CSV exports remain stable across languages, so existing records, filters and backups remain compatible. The interface language is independent of the receipt OCR language, currency and payment time zone.
+
 Use the sun/moon button beside the Penny logo to switch between light and dark mode. The first visit follows the device color scheme; an explicit choice is saved separately as `penny.theme.v1` in this browser. If storage is unavailable, switching still works for the current session. The theme initializes before the styles load and also updates native date/time controls.
 
 Phones use labeled bottom navigation, stacked transaction cards, larger touch controls, single-column forms, and safe-area spacing. Incoming time/channel/search filters can be expanded when needed; the hourly chart scrolls horizontally on phones. All web features remain available in a mobile browser. These changes do not add native Android SMS access or produce an APK.

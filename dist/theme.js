@@ -16,9 +16,10 @@
     const toggle = document.getElementById('theme-toggle');
     if (toggle) {
       toggle.setAttribute('aria-pressed', String(dark));
-      toggle.title = `Switch to ${dark ? 'light' : 'dark'} mode`;
+      toggle.title = document.documentElement.lang === 'vi' ? `Chuyển sang chế độ ${dark ? 'sáng' : 'tối'}` : `Switch to ${dark ? 'light' : 'dark'} mode`;
     }
   }
+  window.addEventListener('penny:language', apply);
   apply();
   system.addEventListener('change', () => { if (!preference) apply(); });
   window.addEventListener('storage', event => {

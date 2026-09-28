@@ -1,5 +1,16 @@
 # Prototype verification
 
+## Vietnamese language — 28 September 2026
+
+- 65 automated tests pass, including language preference persistence, blocked-storage fallback, template parameters and category translation coverage. All browser JavaScript passes syntax checks.
+- Browser: switched English → Vietnamese → English and reloaded in both languages. Saved a synthetic VND 125,000 expense with merchant `Income`, bank `Morning` and a mixed-language note; these values and the canonical `Food & drinks` category survived unchanged. Displayed totals and category labels followed the selected language.
+- Browser: the incoming afternoon/Facebook filter retained its canonical values and three matching payments when switching languages. Payment details retained separate bank/arrival milliseconds and original SMS text. Checked the translated simulator, receipt scanner, SMS import preview and review warnings.
+- Browser: invalid backup JSON showed a Vietnamese error. A VND 200,000 budget displayed VND 75,000 remaining after the synthetic expense.
+- All four Vietnamese routes fit a 320-pixel viewport without document horizontal overflow. The backup dialog also fits without internal horizontal overflow. Checked light and dark themes and the language selector on mobile; no browser console errors/warnings. Native date/time controls retain the browser/system locale. Physical phones and software keyboards were not tested.
+- Only synthetic records were used in a separate localhost origin; no personal records were added to the repository.
+
+## Initial prototype
+
 - 12 domain regression tests pass (`node --test tests/domain.test.mjs`).
 - Browser SMS preview: a Korean approval for ₩12,500 and a Vietnamese debit for ₫185,000 parsed to the correct bank, amount, merchant, date, and category. A synthetic OTP was skipped.
 - Saved the two synthetic imports, reloaded, and confirmed persistence and separate currency totals.

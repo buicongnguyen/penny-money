@@ -1,5 +1,13 @@
 # Prototype verification
 
+## Code and logic fixes — 28 September 2026
+
+- See [REVIEW.md](REVIEW.md) for the confirmed findings, fixes and reproduction details.
+- 85 automated tests pass, including 20 new parser, correction, validation and asynchronous-action regressions. All runtime JavaScript passes syntax checks.
+- Browser: separate VND 250,000 refunds are retained; correcting a VND 100,000 own transfer to income makes it visible in incoming payments after reload. Total money in is VND 600,000.
+- Browser: USD 12.50 receipt text reparses with the corrected currency, saves and survives reload. The USD selection remains after deleting its last transaction. Restoring a synthetic backup hides the prior undo entry; subsequent manual entry saves correctly.
+- Four routes fit a 320-pixel viewport without horizontal document overflow; English/Vietnamese switching works. Browser console has no errors/warnings. Only synthetic records were used.
+
 ## Vietnamese language — 28 September 2026
 
 - 65 automated tests pass, including language preference persistence, blocked-storage fallback, template parameters and category translation coverage. All browser JavaScript passes syntax checks.

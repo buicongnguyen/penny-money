@@ -24,6 +24,8 @@ Source precision is preserved: `14:32`, `14:32:18`, and `14:32:18.123` remain vi
 
 References identify duplicate notifications. Without a reference, available event timestamps participate in duplicate detection so otherwise identical messages received at different milliseconds survive. A reference is scoped by bank, account, currency, direction, and amount. Older date-only imports remain readable. Data that was discarded by the original prototype cannot be recovered retroactively.
 
+Reference labels must be complete tokens: words such as `refund` are not references. Recognized sender metadata takes precedence over bank names in the body. Labeled payer, reference and memo fields cannot supply transaction direction, currency or bank timestamps. The transaction amount determines currency independently of any balance. Short dates near New Year use the closest year supported by arrival metadata and remain flagged for review. Import review and transaction editing synchronize type/category/own-account classification; bank date corrections keep their annotation through backups.
+
 When bank time has only minute, second, or partial-millisecond precision, distinct SMS arrival timestamps are retained as separate review candidates. Matching coarse bank times and message bodies receive a warning rather than silently discarding one payment. Exact repeated notifications and matching bank references are still skipped. Legacy fingerprints are handled without merging distinct arrival timestamps during backup restore.
 
 Korean month/day and Vietnamese day/month dates use the selected or supplied year and remain flagged when inferred. Date-only JSON metadata supplies the date when a message includes only a clock; SMS arrival remains separate. Explicit bank debits stay money out even when a buyer refund is mentioned. Memo/name fields do not establish debit/credit direction.
@@ -49,6 +51,8 @@ Transactions, budgets and bank rules live in browser localStorage for this origi
 Moving from the previous Sites address to GitHub Pages creates a new browser storage origin. Existing records do not move automatically: restore a Penny JSON backup where available, or reimport original SMS files. CSV does not preserve every field. GitHub Pages project paths on one account share an origin; only host trusted apps alongside a local-data application.
 
 Month/currency preferences use a separate storage key and never rewrite the ledger. Ledger and restore writes use Web Locks plus a saved-snapshot check to prevent an older tab from overwriting newer records. A stale tab shows a warning and keeps its edits temporary: download a JSON backup if needed, reload the latest records, and review any restore. Deletions are not automatically merged or resurrected. Browsers without Web Locks cannot persist edits but can download temporary records as JSON. Refresh all open Penny tabs after updating the app so every tab uses the current save safeguards. These fixes do not automatically rewrite historical records or recover transactions discarded by older versions.
+
+Personal-data actions cannot overlap while a save is pending. Candidate additions are validated before changing the workspace. Late SMS/backup file reads are ignored after another selection or pasted text; receipt OCR cancels on close/manual entry and disposes late workers. See [REVIEW.md](REVIEW.md) for the latest code and logic review.
 
 ## GitHub Pages
 

@@ -1,8 +1,9 @@
+import {createLatestRequest} from './async-actions.mjs';
 import {tr,localize,messageError} from './i18n.mjs';
 import {CURRENCIES,CATEGORIES,localDate,validDate} from './domain.mjs';
 import {createBackup,readBackup,mergeBackup,spendingComparison} from './workspace-data.mjs';
 
-export function initWorkspace({getState,restore,commit,changed,escape,money,icon,toast,setView,getRecovery}) {
+export function initWorkspace({getState,restore,commit,changed,escape,money,icon,toast,setView,getRecovery,guardMutation}) {
   const $=id=>document.getElementById(id);
   const expenseCategories=CATEGORIES.filter(c=>!['Income','Refund','Transfer'].includes(c));
   const options=values=>values.map(value=>`<option value="${escape(value)}">${escape(value)}</option>`).join('');
@@ -41,13 +42,13 @@ export function initWorkspace({getState,restore,commit,changed,escape,money,icon
     $('manual-demo-note').textContent=tr(getState().demo?'Saving your first entry replaces the example transactions.':'Saved only in this browser. Transfers between your own accounts are excluded from income and spending.');
     manualType();manualCurrency();manual.showModal();$('manual-merchant').focus();
   };
-  $('manual-form').onsubmit=async e=>{
+  $('manual-form').onsubmit=guardMutation(async e=>{
     e.preventDefault();const currency=$('manual-currency').value,type=$('manual-type').value,value=Number($('manual-amount').value);
     const merchant=$('manual-merchant').value.trim(),bank=$('manual-bank').value.trim(),date=$('manual-date').value;
     if(!merchant||!bank||!validDate(date)||!Number.isFinite(value)||value<=0||value>1e12||['KRW','VND'].includes(currency)&&!Number.isInteger(value)){$('manual-error').textContent=tr('Check the name, account, date and amount. Won and dong must be whole numbers.');return;}
     await commit([{id:crypto.randomUUID(),merchant,bank,date,currency,type,amount:value,category:type==='expense'?$('manual-category').value:({income:'Income',refund:'Refund',transfer:'Transfer'})[type],source:'manual',raw:$('manual-note').value.trim(),warnings:[],incomingTransfer:false,ownAccount:type==='transfer'}]);
     manual.close();toast('Transaction added.');
-  };
+  });
 
   const insight=document.createElement('section'); insight.className='insight-grid'; insight.setAttribute('aria-label','Spending insights');
   insight.innerHTML=`<article class="panel budget-panel"><div class="panel-heading"><div><p class="eyebrow">PLAN YOUR MONTH</p><h2>Monthly budget</h2></div><button id="edit-budget" class="text-button">Set budget</button></div><div class="insight-body"><strong id="budget-value">Give your spending a limit</strong><p id="budget-description"></p><progress id="budget-progress" max="100" value="0" aria-label="Monthly budget used" class="hidden"></progress><p id="budget-scope" class="helper"></p></div></article>
@@ -61,26 +62,27 @@ export function initWorkspace({getState,restore,commit,changed,escape,money,icon
     const whole=['KRW','VND'].includes(s.currency);$('budget-amount').step=whole?'1':'0.01';$('budget-amount').min=whole?'1':'0.01';
     $('remove-budget').classList.toggle('hidden',!s.budgets?.[budgetKey]);$('budget-error').textContent='';budgetDialog.showModal();$('budget-amount').focus();
   };
-  $('budget-form').onsubmit=async e=>{
+  $('budget-form').onsubmit=guardMutation(async e=>{
     e.preventDefault();const value=Number($('budget-amount').value),currency=budgetKey.split(':')[1];
     if(!Number.isFinite(value)||value<=0||value>1e12||['KRW','VND'].includes(currency)&&!Number.isInteger(value)){$('budget-error').textContent=tr('Enter a positive amount. Won and dong must be whole numbers.');return;}
     getState().budgets={...getState().budgets,[budgetKey]:value};await changed();budgetDialog.close();toast('Monthly budget saved.');
-  };
-  $('remove-budget').onclick=async()=>{delete getState().budgets[budgetKey];await changed();budgetDialog.close();toast('Budget removed.');};
+  });
+  $('remove-budget').onclick=guardMutation(async()=>{delete getState().budgets[budgetKey];await changed();budgetDialog.close();toast('Budget removed.');});
   $('review-entries').onclick=()=>{$('review-filter').value='review';$('search').value='';$('category-filter').value='all';setView('transactions');};
 
   function download(content,name){const url=URL.createObjectURL(new Blob([content],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   const backup=dialog('backup-dialog','Backup & restore',`<p class="dialog-description">Keep a copy of your records, or move them to another browser or phone.</p><section class="backup-section"><h3>Save a complete backup</h3><p>Includes transactions, original SMS text, bank rules, and budgets in every currency. This file contains your private records; store it somewhere you trust.</p><button id="download-backup" class="button primary">Download JSON backup</button><button id="download-recovery" class="button secondary hidden">Download original stored data</button></section><section class="backup-section"><h3>Restore a backup</h3><p>Preview first. Existing personal records and budget limits are kept; duplicate transactions are skipped. A demo workspace is replaced by the backup.</p><label for="backup-file">Choose JSON backup</label><input id="backup-file" type="file" accept=".json,application/json"><details><summary>Or paste backup JSON</summary><textarea id="backup-text" rows="5" aria-label="Backup JSON" spellcheck="false"></textarea></details><button id="preview-backup" class="button secondary">Preview restore</button><p id="backup-file-name" class="helper"></p><div id="backup-preview" class="review-summary hidden"></div><p id="backup-error" class="error" role="alert"></p><button id="restore-backup" class="button primary hidden">Restore backup</button></section>`);
-  let backupSource=null,restoreCandidate=null;
+  let backupSource=null,restoreCandidate=null;const backupRead=createLatestRequest();
   function resetPreview(){restoreCandidate=null;$('backup-preview').classList.add('hidden');$('restore-backup').classList.add('hidden');$('backup-error').textContent='';}
   $('backup-button').onclick=()=>{resetPreview();$('download-recovery').classList.toggle('hidden',!getRecovery());backup.showModal();};
   $('download-backup').onclick=()=>{try{download(createBackup(getState()),`penny-backup-${localDate()}.json`);toast('Complete backup downloaded.');}catch(err){$('backup-error').textContent=messageError(err.message);}};
   $('download-recovery').onclick=()=>download(getRecovery(),`penny-recovery-${localDate()}.json`);
   $('backup-file').onchange=async e=>{
-    resetPreview();backupSource=null;const file=e.target.files[0];if(!file)return;
-    try {if(file.size>20*1024*1024)throw new Error('Choose a backup smaller than 20 MB.');backupSource=await file.text();$('backup-text').value='';$('backup-file-name').textContent=file.name;}catch(err){$('backup-error').textContent=messageError(err.message);}
+    resetPreview();const token=backupRead.begin();backupSource=null;$('backup-text').value='';$('backup-file-name').textContent='';$('preview-backup').disabled=false;const file=e.target.files[0];if(!file)return;
+    try {if(file.size>20*1024*1024)throw new Error('Choose a backup smaller than 20 MB.');$('preview-backup').disabled=true;const content=await file.text();if(!backupRead.current(token))return;backupSource=content;$('backup-text').value='';$('backup-file-name').textContent=file.name;}catch(err){if(backupRead.current(token))$('backup-error').textContent=messageError(err.message);}finally{if(backupRead.current(token))$('preview-backup').disabled=false;}
   };
-  $('backup-text').oninput=()=>{backupSource=null;$('backup-file-name').textContent='';$('backup-file').value='';resetPreview();};
+  backup.addEventListener('close',()=>{backupRead.invalidate();$('preview-backup').disabled=false;});
+  $('backup-text').oninput=()=>{backupRead.invalidate();$('preview-backup').disabled=false;backupSource=null;$('backup-file-name').textContent='';$('backup-file').value='';resetPreview();};
   $('preview-backup').onclick=()=>{
     resetPreview();try {
       const source=readBackup(backupSource??$('backup-text').value);const result=mergeBackup(getState(),source);restoreCandidate=source;
@@ -88,18 +90,19 @@ export function initWorkspace({getState,restore,commit,changed,escape,money,icon
       $('backup-preview').classList.remove('hidden');$('restore-backup').classList.remove('hidden');
     } catch(err){$('backup-error').textContent=messageError(err.message);}
   };
-  $('restore-backup').onclick=async()=>{
+  $('restore-backup').onclick=guardMutation(async()=>{
     if(!restoreCandidate)return;
     try {const result=mergeBackup(getState(),restoreCandidate);await restore(result.data);resetPreview();backup.close();toast(tr('Restored {added} transactions. {skipped} duplicates skipped.',{added:result.added,skipped:result.skipped}));}catch(err){$('backup-error').textContent=messageError(err.message);}
-  };
+  });
   let deleted=null;
-  $('undo-delete').onclick=async()=>{
+  $('undo-delete').onclick=guardMutation(async()=>{
     if(!deleted)return;const s=getState();
     if(s.demo!==deleted.demo){deleted=null;undo.classList.add('hidden');toast('The workspace changed; this deletion can no longer be undone.');return;}
     if(!s.transactions.some(t=>t.id===deleted.row.id))s.transactions.push(deleted.row);
     deleted=null;undo.classList.add('hidden');await changed();toast('Transaction restored.');
-  };
+  });
   return {
+    resetUndo(){deleted=null;undo.classList.add('hidden');},
     rememberDeleted(row){deleted={row:structuredClone(row),demo:getState().demo};undo.classList.remove('hidden');},
     render(){
       const s=getState(),limit=s.budgets?.[`${s.month}:${s.currency}`];

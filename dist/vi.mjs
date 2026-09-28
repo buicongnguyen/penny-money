@@ -1,5 +1,6 @@
 // English message keys are stable; transaction/category values remain unchanged.
 export const VI = {
+  'A change is still being saved. Wait for it to finish, then try again.':'Đang lưu một thay đổi. Hãy đợi hoàn tất rồi thử lại.',
   'Review {count} entry →':'Kiểm tra {count} giao dịch →',
   'Close bank rule':'Đóng quy tắc ngân hàng',
   'SNAP. CHECK. SAVE.':'CHỤP. KIỂM TRA. LƯU.', 'Scan a receipt':'Quét hóa đơn',

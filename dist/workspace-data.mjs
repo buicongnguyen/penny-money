@@ -38,6 +38,7 @@ export function validateWorkspace(data) {
       requireValue(object(stamp) && Number.isSafeInteger(stamp.epochMs) && stamp.epochMs>=0 && stamp.epochMs<=4102444800000 && ['minute','second','fraction','millisecond'].includes(stamp.precision) && Number.isInteger(stamp.fractionDigits) && stamp.fractionDigits>=0 && stamp.fractionDigits<=3 && typeof stamp.assumedZone==='boolean','Invalid payment timestamp.');
       requireValue(stamp.precision==='fraction'?stamp.fractionDigits>=1:stamp.fractionDigits===(stamp.precision==='millisecond'?3:0),'Timestamp precision does not match its digits.');
       row[key]={epochMs:stamp.epochMs,precision:stamp.precision,fractionDigits:stamp.fractionDigits,assumedZone:stamp.assumedZone};
+      if(stamp.userCorrected!==undefined){requireValue(typeof stamp.userCorrected==='boolean','Invalid payment timestamp.');row[key].userCorrected=stamp.userCorrected;}
     }
     return row;
   });
@@ -57,6 +58,13 @@ export function validateWorkspace(data) {
 
 export function createBackup(state,now=new Date()) {
   return JSON.stringify({format:'penny-backup',version:1,exportedAt:now.toISOString(),data:validateWorkspace(state)},null,2);
+}
+// Validate additions before replacing the editable workspace. A rejected import
+// must leave existing records usable and exportable, including temporary records.
+export function appendTransactions(state,rows){
+  requireValue(Array.isArray(rows)&&rows.length>0,'Select at least one transaction.');
+  const latest=[...rows].sort((a,b)=>b.date.localeCompare(a.date))[0];
+  return validateWorkspace({...state,transactions:[...(state.demo?[]:state.transactions),...rows],demo:false,month:latest.date.slice(0,7),currency:latest.currency});
 }
 export function readBackup(content) {
   requireValue(typeof content==='string' && content.length<=20*1024*1024,'Choose a backup smaller than 20 MB.');

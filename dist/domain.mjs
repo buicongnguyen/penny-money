@@ -1,4 +1,4 @@
-import {smsTiming,transferFacts,paymentIdentity,timeParts,messageDate,bankSignalText,coarsePaymentKey} from './payments.mjs';
+import {smsTiming,transferFacts,paymentIdentity,timeParts,messageDate,bankSignalText,coarsePaymentKey,bankContent,hasFalseReference} from './payments.mjs';
 export const CURRENCIES = ['KRW', 'VND', 'USD', 'EUR', 'GBP', 'INR', 'SGD', 'AUD'];
 export const CATEGORIES = ['Food & drinks', 'Groceries', 'Shopping', 'Transport', 'Bills & home', 'Health', 'Entertainment', 'Travel', 'Other', 'Income', 'Refund', 'Transfer'];
 export const BANK_RULES = [
@@ -24,7 +24,7 @@ export function parseAmount(value,currency='KRW'){
 }
 export function detectCurrency(text,fallback='KRW'){
   if(/(?:KRW|₩|\d\s*원)/i.test(text))return 'KRW';
-  if(/(?:VND|VNĐ|₫|\d\s*(?:đ|dong|đồng)\b)/i.test(text))return 'VND';
+  if(/(?:VND|VNĐ|₫|\d\s*(?:đồng|dong|đ)(?=$|[^\p{L}]))/iu.test(text))return 'VND';
   for(const c of CURRENCIES)if(new RegExp(`\\b${c}\\b`,'i').test(text))return c;
   if(text.includes('€'))return 'EUR';if(text.includes('£'))return 'GBP';if(text.includes('₹'))return 'INR';if(text.includes('$'))return ['SGD','AUD'].includes(fallback)?fallback:'USD';
   return fallback;
@@ -32,7 +32,7 @@ export function detectCurrency(text,fallback='KRW'){
 export function extractAmounts(text,currency){
   const result=[];
   const rx=/(?:KRW|VND|VNĐ|USD|EUR|GBP|INR|SGD|AUD|₩|₫|\$|€|£|₹)\s*([+-]?\d[\d.,]*)|([+-]?\d[\d.,]*)\s*(?:KRW|VND|VNĐ|USD|EUR|GBP|INR|SGD|AUD|원|₫|đồng|dong|đ)(?![a-z])/gi;
-  for(const m of text.matchAll(rx)){const amount=parseAmount(m[1]||m[2],currency);if(amount){const before=normalize(text.slice(Math.max(0,m.index-24),m.index));const balance=/(?:balance|bal\.?|so du|sd|잔액|누적|han muc)\s*[:=]?\s*$/.test(before);result.push({amount,index:m.index,raw:m[0],balance});}}
+  for(const m of text.matchAll(rx)){const unit=detectCurrency(m[0],currency);const amount=parseAmount(m[1]||m[2],unit);if(amount){const before=normalize(text.slice(Math.max(0,m.index-24),m.index));const balance=/(?:balance|bal\.?|so du|sd|잔액|누적|han muc)\s*[:=]?\s*$/.test(before);result.push({amount,currency:unit,index:m.index,raw:m[0],balance});}}
   return result;
 }
 export const detectDate=(text,fallback=localDate(),currency='KRW')=>messageDate(text,fallback,currency);
@@ -49,7 +49,18 @@ export function categorize(text,type='expense'){
     ['Shopping',/coupang|쿠팡|다이소|daiso|shopee|lazada|tiki|uniqlo|무신사|musinsa|shopping|store|amazon/]
   ];return groups.find(([,rx])=>rx.test(s))?.[0]||'Other';
 }
-export function detectBank(text,sender='',rules=BANK_RULES){const hay=normalize(sender+' '+text);return rules.find(r=>r.keywords.some(k=>{const v=normalize(k);if(!v)return false;return /^[a-z0-9 ]+$/.test(v)?new RegExp(`(^|[^a-z0-9])${v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}([^a-z0-9]|$)`).test(hay):hay.includes(v);} ))?.name||'Unknown bank';}
+export function detectBank(text,sender='',rules=BANK_RULES){
+  function match(value){
+    const hay=normalize(value);let found=null,position=Infinity;
+    for(const rule of rules)for(const keyword of rule.keywords){
+      const word=normalize(keyword);if(!word)continue;
+      const index=/^[a-z0-9 ]+$/.test(word)?hay.search(new RegExp('(^|[^a-z0-9])'+word+'([^a-z0-9]|$)')):hay.indexOf(word);
+      if(index>=0&&index<position){position=index;found=rule.name;}
+    }
+    return found;
+  }
+  return match(sender)||match(bankContent(text))||'Unknown bank';
+}
 function merchantName(text,bank){
   let m=text.match(/(?:\bat\b|\btai\b|\btại\b|가맹점\s*[:：]?|사용처\s*[:：]?|merchant\s*[:：]?)\s+(.+?)(?=\s+(?:on|ngay|ngày|luc|lúc|balance|bal|card|ref|잔액)\b|[.;\n]|$)/i);
   if(m)return m[1].trim().slice(0,80);
@@ -64,20 +75,21 @@ export const fingerprint=t=>paymentIdentity(t)||`${t.source||'sms'}|${t.date}|${
 export function transactionKeys(t){
   const current=fingerprint(t),stored=t.fingerprint;
   // Old coarse-clock identities must not collapse records with distinct arrivals.
-  const obsolete=current.startsWith('sms-event|')&&stored?.startsWith('sms-time|');
+  const obsolete=current.startsWith('sms-event|')&&stored?.startsWith('sms-time|')||hasFalseReference(t)&&stored?.startsWith('bank-ref|');
   return [...new Set([current,...(stored&&!obsolete?[stored]:[])])];
 }
 export function parseSms(message,{currency='KRW',date=localDate(),rules=BANK_RULES}={}){
-  const obj=typeof message==='string'?{body:message}:message;
-  const raw=String(obj.body??obj.text??obj.message??'').trim(); const s=bankSignalText(raw);
+  const obj=typeof message==='string'?{body:message}:message||{};
+  const raw=([obj.body,obj.text,obj.message].find(value=>typeof value==='string')||'').trim(); const s=bankSignalText(raw);
   const skip=reason=>({status:'skipped',reason,raw});
   if(!raw)return skip('Empty message');
   if(/\botp\b|one.time.password|verification code|인증번호|인증코드|ma xac (?:thuc|nhan)|ma otp/.test(s))return skip('Verification code');
   if(/\bdeclined\b|\bfailed\b|승인거절|잔액부족|that bai|khong thanh cong/.test(s))return skip('Failed transaction');
   if(/\(광고\)|\[광고\]|khuyen mai|promotion|pre.approved|credit limit|han muc|payment due|thanh toan toi thieu|결제예정|청구예정/.test(s))return skip('Promotion or payment reminder');
   const bank=detectBank(raw,String(obj.sender??obj.address??''),rules);
-  const cur=detectCurrency(raw,currency);
-  const amounts=extractAmounts(raw,cur).filter(a=>!a.balance);
+  const financial=bankContent(raw);
+  const amounts=extractAmounts(financial,currency).filter(a=>!a.balance);
+  const cur=amounts[0]?.currency||detectCurrency(financial,currency);
   const expense=/spent|debited|purchase|paid|withdraw|payment of|승인|출금|결제|이체|thanh toan|rut tien|ghi no|gd\s*[:=]?\s*-|[−-]\s*[\d.,]+\s*(?:vnd|d|dong)|chuyen (?:khoan|tien)/.test(s);
   const income=/credited|received|deposit|salary|입금|급여|ghi co|nhan tien|gd\s*[:=]?\s*\+|\+\s*[\d.,]+\s*(?:vnd|d|dong)/.test(s);
   const refund=/refund|reversal|취소|환불|hoan tien/.test(s);
@@ -90,11 +102,11 @@ export function parseSms(message,{currency='KRW',date=localDate(),rules=BANK_RUL
   let suppliedDate=obj.date;
   if(timing.receivedTime)suppliedDate=timeParts(timing.receivedTime,timing.timeZone).date;
   const hasMetadata=typeof suppliedDate==='string'&&validDate(suppliedDate.slice(0,10));
-  const detected=detectDate(raw,hasMetadata?suppliedDate.slice(0,10):date,cur);
+  const detected=messageDate(financial,hasMetadata?suppliedDate.slice(0,10):date,cur,hasMetadata?suppliedDate.slice(0,10):null);
   const merchant=type==='income'&&facts.payer?facts.payer:merchantName(raw,bank);
   const warnings=[];
   if(bank==='Unknown bank')warnings.push('Check bank');
-  if(detected.inferred&&!hasMetadata)warnings.push('Check date');
+  if(detected.invalid||detected.inferred&&!hasMetadata)warnings.push('Check date');
   if(merchant==='Unidentified transaction')warnings.push('Add merchant');
   if(amounts.length>1)warnings.push('Multiple amounts: check total');
   if(facts.positive&&facts.negative||income&&expense&&!refund&&!(facts.positive&&!facts.negative))warnings.push('Check transaction type');
@@ -124,13 +136,13 @@ export function summarize(transactions,{month,bank='all',currency='KRW'}={}){
 export function receiptSuggestion(text,{currency='KRW',date=localDate()}={}){
   const lines=text.split('\n').map(x=>x.trim()).filter(Boolean);const cur=detectCurrency(text,currency);const candidates=[];
   lines.forEach((line,index)=>{const s=normalize(line);if(/subtotal|sub total|tien hang|부가세|공급가|거스름|change|cash tendered|tien khach dua/.test(s))return;
-    const marked=extractAmounts(line,cur).filter(a=>!a.balance);const plain=[...line.matchAll(/(?:^|\s)(\d{1,3}(?:[.,]\d{3})+|\d{3,12})(?=\s|$)/g)].map(m=>({amount:parseAmount(m[1],cur)})).filter(a=>a.amount);
+    const marked=extractAmounts(line,cur).filter(a=>!a.balance);const plain=[...line.matchAll(/(?:^|\s)(\d+(?:[.,]\d+)*)(?=\s|$)/g)].map(m=>({amount:parseAmount(m[1],cur)})).filter(a=>a.amount);
     const amounts=marked.length?marked:plain;if(!amounts.length)return;
     const priority=/grand total|total due|amount paid|thanh toan|tong cong|tong tien|합계|결제금액|받을금액|총액|총금액/.test(s)?3:/\btotal\b|총/.test(s)?2:0;
-    amounts.forEach(a=>candidates.push({amount:a.amount,priority,index}));});
+    amounts.forEach(a=>candidates.push({amount:a.amount,currency:a.currency||cur,priority,index}));});
   candidates.sort((a,b)=>b.priority-a.priority||b.amount-a.amount);
   const merchant=lines.slice(0,7).find(l=>/[a-zA-Z가-힣À-ỹ]/.test(l)&&!/^receipt$|^영수증$|^hoa don$|tax invoice|사업자|영수증번호|tel|전화|\d{2}[:/.-]\d{2}/i.test(l))||'';
-  return {merchant:merchant.slice(0,100),amount:candidates[0]?.amount??'',currency:cur,date:detectDate(text,date,cur).date,category:categorize(merchant),type:'expense',bank:'Cash / receipt',source:'receipt',raw:text,warnings:['Review OCR amount, merchant, and date'],alternatives:[...new Set(candidates.map(c=>c.amount))].slice(0,5)};
+  return {merchant:merchant.slice(0,100),amount:candidates[0]?.amount??'',currency:candidates[0]?.currency||cur,date:detectDate(text,date,cur).date,category:categorize(merchant),type:'expense',bank:'Cash / receipt',source:'receipt',raw:text,warnings:['Review OCR amount, merchant, and date'],alternatives:[...new Set(candidates.filter(c=>c.currency===(candidates[0]?.currency||cur)).map(c=>c.amount))].slice(0,5)};
 }
 export function demoTransactions(){
   const month=localDate().slice(0,7);const prev=new Date();prev.setDate(1);prev.setMonth(prev.getMonth()-1);const pm=localDate(prev).slice(0,7);
